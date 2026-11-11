@@ -22,7 +22,7 @@ flowchart LR
     L --> R[Shadow replay with candidate mapping]
     R --> V[Contract and customer query verifier]
     V --> C[5 percent canary]
-    C --> A[Human approval]
+    C --> A[Explicit approval gate]
     A --> P[Atomic local promotion]
     P --> D
 ```
@@ -62,7 +62,7 @@ The local HTTP [demo result](results/demo.json) starts with 50 accepted v1 event
 
 In the separate [local-model demo](results/model_demo.json), the assistant chose the useful v1+v2 candidate, but its explanation incorrectly said v1 was dead-lettered; the actual counts show v2 was. This is why the assistant's prose is not used as cutover evidence.
 
-**What these numbers do not show:** the benchmark uses synthetic customers and fault generators I wrote. The independent expected state is generated from the event specification, but the contract checks used at cutover are also synthetic. All twenty bad mapping candidates corrupt tenant routing in the same way; 20/20 is not a general detection rate for arbitrary bugs. The destination is a local SQLite transaction, so rollback is atomic here; an external SaaS API would need staging or compensating writes. The baseline is intentionally simple and does not represent a tuned commercial connector. I do not claim production latency from these runs.
+**What these numbers do not show:** the benchmark uses synthetic customers and fault generators I wrote. The independent expected state is generated from the event specification, but the contract checks used at cutover are also synthetic. All twenty bad mapping candidates corrupt tenant routing in the same way; 20/20 is not a general detection rate for arbitrary bugs. The approval gate is a Boolean set by the local demo or operator; it does not authenticate or audit a real person. The destination is a local SQLite transaction, so rollback is atomic here; an external SaaS API would need staging or compensating writes. The baseline is intentionally simple and does not represent a tuned commercial connector. I do not claim production latency from these runs.
 
 ## Run it yourself
 
