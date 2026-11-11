@@ -15,7 +15,7 @@ A local customer integration simulator that repairs webhook schema drift with du
 
 ## Results and limits
 
-The 2026-11-11 run has 120 scenarios, 120,000 logical events, 122,860 deliveries, four profiles and six fault classes. It ended with zero valid events unapplied, zero final state mismatches, zero wrong-tenant effects and 20/20 wrong-tenant candidate mappings rejected. The direct connector baseline had 3,130 final entity mismatches, 11,180 silently dropped delivery attempts, 2,860 duplicate effects and 20,000 wrong-tenant effects. Ten tests pass, including an injected failure during local promotion and a same-ID cross-tenant case. The local-model demo chose v1+v2 but incorrectly described which schema was failing. These are synthetic results; the benchmark's expected state is generated independently from the event specification. The bad candidates cover one global tenant-routing bug class. The approval gate is a Boolean, not authenticated human sign-off. Atomic rollback is only valid for the local SQLite destination.
+The Atlas HTTP demo recovered 50/50 renamed invoice events after cutover; its deliberately simple direct connector baseline would silently drop 50 deliveries and leave 28 invoice entities mismatched. The 2026-11-11 matrix has 120 scenarios, 120,000 logical events, 122,860 deliveries, four profiles and six fault classes. It ended with zero valid events unapplied, zero final state mismatches, zero wrong-tenant effects and 20/20 wrong-tenant candidate mappings rejected. The direct connector baseline across the matrix had 3,130 final entity mismatches, 11,180 silently dropped delivery attempts, 2,860 duplicate effects and 20,000 wrong-tenant effects. Ten tests pass, including an injected failure during local promotion and a same-ID cross-tenant case. The local-model demo chose v1+v2 but incorrectly described which schema was failing. These are synthetic results; the benchmark's expected state is generated independently from the event specification. The bad candidates cover one global tenant-routing bug class. The approval gate is a Boolean, not authenticated human sign-off. Atomic rollback is only valid for the local SQLite destination.
 
 ## Two-minute STAR answer
 
@@ -25,7 +25,7 @@ The 2026-11-11 run has 120 scenarios, 120,000 logical events, 122,860 deliveries
 
 **Action:** I kept a durable raw event log, added idempotent effects and sequence-aware destination updates, then built a versioned mapping. I replayed recorded events through the candidate in shadow mode, compared invariants and customer query samples, required a canary and approval, and made local promotion and rollback transactional. I also added a read-only LangGraph diagnostic path.
 
-**Result:** Across 120 local scenarios and 120,000 logical events, every valid event had an effect and the final state matched the independently generated reference. All 20 wrong-tenant mapping candidates were rejected. This demonstrates the local design; it does not establish a production customer deployment.
+**Result:** The Atlas HTTP demo recovered all 50 renamed invoice events; a direct connector would silently drop them and leave 28 invoice entities mismatched. Across 120 local scenarios and 120,000 logical events, every valid event had an effect and the final state matched the independently generated reference. All 20 wrong-tenant mapping candidates were rejected. This demonstrates the local design; it does not establish a production customer deployment.
 
 ## Likely follow-ups
 

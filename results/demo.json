@@ -35,5 +35,11 @@
     "mapping": "atlas-v1"
   },
   "customer_query_matches": true,
+  "direct_connector_baseline": {
+    "duplicate_effects": 0,
+    "silent_drops": 50,
+    "state_mismatches": 28,
+    "wrong_tenant_writes": 0
+  },
   "good_candidate_promoted": true
 }

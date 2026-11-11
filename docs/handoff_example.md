@@ -2,11 +2,22 @@
 
 ## Customer-visible failure
 
-The v1 connector dead-lettered 50 v2 webhook events after a field rename. This is a local synthetic scenario.
+The v1 mapping accepted 50 invoice events and dead-lettered 50 renamed v2 events. The durable raw log retained every delivery for repair. This is a local synthetic scenario.
+
+## Acceptance checks
+
+- Every valid event has one destination effect after cutover.
+- Customer invoice values match the twelve selected query checks.
+- No event writes outside the Atlas tenant.
+- A deliberately corrupted value mapping fails verification before promotion.
 
 ## Evidence and change
 
-The durable raw log retained the payloads. Shadow replay tested the versioned v1+v2 mapping against tenant boundaries and twelve customer query checks. A deliberately corrupted mapping was rejected (customer query mismatch: atlas/E00, customer query mismatch: atlas/E03, customer query mismatch: atlas/E05, customer query mismatch: atlas/E07, customer query mismatch: atlas/E09, customer query mismatch: atlas/E11, customer query mismatch: atlas/E13, customer query mismatch: atlas/E17, customer query mismatch: atlas/E19, customer query mismatch: atlas/E21, customer query mismatch: atlas/E23, customer query mismatch: atlas/E26). Approved cutover replayed the log; 100 logical events have one destination effect each.
+Shadow replay tested the versioned v1+v2 mapping against tenant boundaries and 12 customer query checks. The corrupted mapping was rejected by 12 query mismatches. Approved cutover replayed the log; 100 logical events have one destination effect each, with no dead letters. A direct connector would have silently dropped 50 deliveries and left 28 invoice entities in the wrong final state in this same scenario.
+
+## Local rollback plan
+
+Keep the current mapping while shadow checks run. Reject a failing candidate. An injected mid-promotion failure rolls back the local SQLite transaction; replay the retained log after a corrected mapping passes verification.
 
 ## Residual risk
 

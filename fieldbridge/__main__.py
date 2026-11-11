@@ -13,7 +13,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from .assistant import DiagnosticGraph, MLXDiagnostic
 from .benchmark import run_matrix
 from .core import Bridge
-from .fixtures import make_scenario
+from .fixtures import make_scenario, naive_baseline
 from .http_api import serve_in_thread
 
 
@@ -54,6 +54,7 @@ def demo(output: Path, use_model: bool = False) -> dict:
                 "before": before, "bad_candidate_rejected": not bad.passed,
                 "bad_candidate_reasons": bad.reasons,
                 "good_candidate_promoted": good.passed, "after": after,
+                "direct_connector_baseline": naive_baseline(scenario),
                 "assistant": assistant_result,
                 "customer_query_matches": all(
                     bridge.state()[key]["value"] == value
@@ -71,14 +72,27 @@ def demo(output: Path, use_model: bool = False) -> dict:
     handoff.write_text(
         "# Synthetic customer handoff: Atlas invoice events\n\n"
         "## Customer-visible failure\n\n"
-        f"The v1 connector dead-lettered {before['counts'].get('dead_letter', 0)} "
-        "v2 webhook events after a field rename. This is a local synthetic scenario.\n\n"
+        f"The v1 mapping accepted {before['counts'].get('accepted', 0)} invoice events "
+        f"and dead-lettered {before['counts'].get('dead_letter', 0)} renamed v2 events. "
+        "The durable raw log retained every delivery for repair. This is a local synthetic scenario.\n\n"
+        "## Acceptance checks\n\n"
+        "- Every valid event has one destination effect after cutover.\n"
+        "- Customer invoice values match the twelve selected query checks.\n"
+        "- No event writes outside the Atlas tenant.\n"
+        "- A deliberately corrupted value mapping fails verification before promotion.\n\n"
         "## Evidence and change\n\n"
-        "The durable raw log retained the payloads. Shadow replay tested the versioned "
-        "v1+v2 mapping against tenant boundaries and twelve customer query checks. "
-        f"A deliberately corrupted mapping was rejected ({', '.join(bad.reasons)}). "
+        "Shadow replay tested the versioned v1+v2 mapping against tenant boundaries "
+        f"and {len(scenario['checks'])} customer query checks. "
+        f"The corrupted mapping was rejected by {len(bad.reasons)} query mismatches. "
         f"Approved cutover replayed the log; {after['counts'].get('accepted', 0)} "
-        "logical events have one destination effect each.\n\n"
+        "logical events have one destination effect each, with no dead letters. "
+        f"A direct connector would have silently dropped {result['direct_connector_baseline']['silent_drops']} "
+        f"deliveries and left {result['direct_connector_baseline']['state_mismatches']} "
+        "invoice entities in the wrong final state in this same scenario.\n\n"
+        "## Local rollback plan\n\n"
+        "Keep the current mapping while shadow checks run. Reject a failing candidate. "
+        "An injected mid-promotion failure rolls back the local SQLite transaction; "
+        "replay the retained log after a corrected mapping passes verification.\n\n"
         "## Residual risk\n\n"
         "The destination is a local SQLite transaction. An external API would need "
         "staged writes or compensation for true rollback. The customer fixtures are synthetic.\n\n"
