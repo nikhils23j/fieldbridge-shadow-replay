@@ -26,7 +26,7 @@ ax.bar([i + 0.2 for i in x], [fieldbridge[f] for f in faults], 0.4, label="Field
 ax.set_xticks(list(x), [f.replace("_", "\n") for f in faults])
 ax.set_ylabel("Final entity state mismatches")
 ax.set_title("Local synthetic fault matrix")
-ax.legend()
+ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=2)
 fig.tight_layout()
 out = ROOT / "docs/img/fault_matrix.png"
 out.parent.mkdir(parents=True, exist_ok=True)
