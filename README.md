@@ -27,7 +27,7 @@ flowchart LR
     P --> D
 ```
 
-The four profiles stand for invoice amounts, inventory units, active seats and shipment progress. Each has a v1 contract and a renamed v2 contract. The raw log, destination effects and current mapping are durable in SQLite. A repeated event ID increments its delivery count but does not create another effect. For an entity, a lower sequence number cannot overwrite a newer value. A local 429 is retried within a bounded budget; malformed or unsupported events remain visible in the dead-letter queue.
+The four profiles stand for invoice amounts, inventory units, active seats and shipment progress. Each has a v1 contract and a renamed v2 contract. The raw log, destination effects and current mapping are durable in SQLite. A repeated event ID within the same tenant increments its delivery count but does not create another effect; the same external ID in a different tenant remains distinct. For an entity, a lower sequence number cannot overwrite a newer value. A local 429 is retried within a bounded budget; malformed or unsupported events remain visible in the dead-letter queue.
 
 ```mermaid
 sequenceDiagram

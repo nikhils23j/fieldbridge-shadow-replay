@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass
@@ -74,12 +75,14 @@ class Bridge:
         self.db.executescript(
             """
             CREATE TABLE IF NOT EXISTS raw(
-                event_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, profile TEXT NOT NULL,
+                event_id TEXT NOT NULL, tenant TEXT NOT NULL, profile TEXT NOT NULL,
                 schema TEXT NOT NULL, body TEXT NOT NULL, deliveries INTEGER NOT NULL DEFAULT 1,
-                outcome TEXT NOT NULL DEFAULT 'pending', reason TEXT);
+                outcome TEXT NOT NULL DEFAULT 'pending', reason TEXT,
+                PRIMARY KEY(tenant,event_id));
             CREATE TABLE IF NOT EXISTS effects(
-                event_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, entity TEXT NOT NULL,
-                seq INTEGER NOT NULL, value INTEGER NOT NULL);
+                event_id TEXT NOT NULL, tenant TEXT NOT NULL, entity TEXT NOT NULL,
+                seq INTEGER NOT NULL, value INTEGER NOT NULL,
+                PRIMARY KEY(tenant,event_id));
             CREATE TABLE IF NOT EXISTS destination(
                 tenant TEXT NOT NULL, entity TEXT NOT NULL, seq INTEGER NOT NULL,
                 value INTEGER NOT NULL, PRIMARY KEY(tenant,entity));
@@ -99,7 +102,7 @@ class Bridge:
                     (initial.name, initial.to_json()),
                 )
         self.rate_limit = rate_limit
-        self.attempts: dict[str, int] = {}
+        self.attempts: dict[tuple[str, str], int] = {}
         self.retry_count = 0
 
     def close(self) -> None:
@@ -129,12 +132,13 @@ class Bridge:
                 raise ValueError(f"missing envelope key {key}")
         with self.db:
             old = self.db.execute(
-                "SELECT outcome FROM raw WHERE event_id=?", (event["event_id"],)
+                "SELECT outcome FROM raw WHERE tenant=? AND event_id=?",
+                (event["tenant"], event["event_id"]),
             ).fetchone()
             if old:
                 self.db.execute(
-                    "UPDATE raw SET deliveries=deliveries+1 WHERE event_id=?",
-                    (event["event_id"],),
+                    "UPDATE raw SET deliveries=deliveries+1 WHERE tenant=? AND event_id=?",
+                    (event["tenant"], event["event_id"]),
                 )
                 return "duplicate_delivery"
             self.db.execute(
@@ -148,13 +152,16 @@ class Bridge:
 
     def _apply(self, canonical: dict, *, simulate_rate_limit: bool) -> None:
         event_id = canonical["event_id"]
-        if simulate_rate_limit and self.rate_limit and int(event_id[-2:], 16) % 10 == 0:
-            attempt = self.attempts.get(event_id, 0)
-            self.attempts[event_id] = attempt + 1
+        throttled = hashlib.sha256(event_id.encode()).digest()[0] % 10 == 0
+        if simulate_rate_limit and self.rate_limit and throttled:
+            attempt_key = (canonical["tenant"], event_id)
+            attempt = self.attempts.get(attempt_key, 0)
+            self.attempts[attempt_key] = attempt + 1
             if attempt < 2:
                 raise RateLimited("local destination returned 429")
         old = self.db.execute(
-            "SELECT 1 FROM effects WHERE event_id=?", (event_id,)
+            "SELECT 1 FROM effects WHERE tenant=? AND event_id=?",
+            (canonical["tenant"], event_id),
         ).fetchone()
         if old:
             return
@@ -185,8 +192,8 @@ class Bridge:
         except MappingError as exc:
             with self.db:
                 self.db.execute(
-                    "UPDATE raw SET outcome='dead_letter',reason=? WHERE event_id=?",
-                    (str(exc), event["event_id"]),
+                    "UPDATE raw SET outcome='dead_letter',reason=? WHERE tenant=? AND event_id=?",
+                    (str(exc), event["tenant"], event["event_id"]),
                 )
             return "dead_letter"
         for attempt in range(3):
@@ -194,8 +201,8 @@ class Bridge:
                 with self.db:
                     self._apply(canonical, simulate_rate_limit=True)
                     self.db.execute(
-                        "UPDATE raw SET outcome='accepted',reason=NULL WHERE event_id=?",
-                        (event["event_id"],),
+                        "UPDATE raw SET outcome='accepted',reason=NULL WHERE tenant=? AND event_id=?",
+                        (event["tenant"], event["event_id"]),
                     )
                 return "accepted"
             except RateLimited:
@@ -203,8 +210,8 @@ class Bridge:
                 if attempt == 2:
                     with self.db:
                         self.db.execute(
-                            "UPDATE raw SET outcome='dead_letter',reason='429 retry budget' WHERE event_id=?",
-                            (event["event_id"],),
+                            "UPDATE raw SET outcome='dead_letter',reason='429 retry budget' WHERE tenant=? AND event_id=?",
+                            (event["tenant"], event["event_id"]),
                         )
                     return "dead_letter"
         raise AssertionError("unreachable")
@@ -217,13 +224,14 @@ class Bridge:
     @staticmethod
     def project(events: list[dict], mapping: Mapping) -> tuple[dict, int, list[str]]:
         state: dict[str, dict] = {}
-        seen: set[str] = set()
+        seen: set[tuple[str, str]] = set()
         dead = 0
         reasons: list[str] = []
         for event in events:
-            if event["event_id"] in seen:
+            event_key = (event["tenant"], event["event_id"])
+            if event_key in seen:
                 continue
-            seen.add(event["event_id"])
+            seen.add(event_key)
             try:
                 item = mapping.map(event)
             except MappingError as exc:
@@ -303,14 +311,14 @@ class Bridge:
                     item = candidate.map(event)
                 except MappingError as exc:
                     self.db.execute(
-                        "UPDATE raw SET outcome='dead_letter',reason=? WHERE event_id=?",
-                        (str(exc), event["event_id"]),
+                        "UPDATE raw SET outcome='dead_letter',reason=? WHERE tenant=? AND event_id=?",
+                        (str(exc), event["tenant"], event["event_id"]),
                     )
                     continue
                 self._apply(item, simulate_rate_limit=False)
                 self.db.execute(
-                    "UPDATE raw SET outcome='accepted' WHERE event_id=?",
-                    (event["event_id"],),
+                    "UPDATE raw SET outcome='accepted' WHERE tenant=? AND event_id=?",
+                    (event["tenant"], event["event_id"]),
                 )
                 if inject_failure_after == index:
                     raise RuntimeError("injected failure during local promotion")
@@ -339,14 +347,14 @@ class Bridge:
                     item = prior.map(event)
                 except MappingError as exc:
                     self.db.execute(
-                        "UPDATE raw SET outcome='dead_letter',reason=? WHERE event_id=?",
-                        (str(exc), event["event_id"]),
+                        "UPDATE raw SET outcome='dead_letter',reason=? WHERE tenant=? AND event_id=?",
+                        (str(exc), event["tenant"], event["event_id"]),
                     )
                     continue
                 self._apply(item, simulate_rate_limit=False)
                 self.db.execute(
-                    "UPDATE raw SET outcome='accepted',reason=NULL WHERE event_id=?",
-                    (event["event_id"],),
+                    "UPDATE raw SET outcome='accepted',reason=NULL WHERE tenant=? AND event_id=?",
+                    (event["tenant"], event["event_id"]),
                 )
             self._audit("rolled_back", {"mapping": prior.name})
 

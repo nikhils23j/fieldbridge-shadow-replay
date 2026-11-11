@@ -51,6 +51,21 @@ def test_duplicate_and_out_of_order_events_converge(tmp_path):
         bridge.close()
 
 
+def test_same_external_id_in_two_tenants_is_not_a_duplicate(tmp_path):
+    scenario = make_scenario("atlas", "retry_duplicates", 3, 20)
+    bridge = Bridge(tmp_path / "db.sqlite", scenario["initial"])
+    first = scenario["events"][0]
+    other = {
+        **first, "tenant": "second-tenant",
+        "body": {**first["body"], "tenant": "second-tenant"},
+    }
+    assert bridge.ingest(first) == "accepted"
+    assert bridge.ingest(other) == "accepted"
+    assert bridge.counts()["effects"] == 2
+    assert len(bridge.state()) == 2
+    bridge.close()
+
+
 def test_missing_fields_are_visible_in_dead_letter(tmp_path):
     bridge, scenario, report = _run(tmp_path, "delta", "missing_fields")
     assert not report.passed
