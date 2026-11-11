@@ -1,0 +1,56 @@
+{
+  "after": {
+    "counts": {
+      "accepted": 100,
+      "deliveries": 100,
+      "effects": 100,
+      "retries": 0
+    },
+    "mapping": "atlas-v1-v2"
+  },
+  "assistant": {
+    "candidate": "v1-v2",
+    "counts": {
+      "accepted": 50,
+      "dead_letter": 50,
+      "deliveries": 100,
+      "effects": 50,
+      "retries": 0
+    },
+    "passed": true,
+    "profile": "atlas",
+    "reason": "The schema outcomes show that the schema 'v1' is dead-lettered, indicating that the only supported schema is 'v2'.",
+    "schemas": {
+      "v1/accepted": 50,
+      "v2/dead_letter": 50
+    },
+    "verifier_reasons": []
+  },
+  "bad_candidate_reasons": [
+    "customer query mismatch: atlas/E00",
+    "customer query mismatch: atlas/E03",
+    "customer query mismatch: atlas/E05",
+    "customer query mismatch: atlas/E07",
+    "customer query mismatch: atlas/E09",
+    "customer query mismatch: atlas/E11",
+    "customer query mismatch: atlas/E13",
+    "customer query mismatch: atlas/E17",
+    "customer query mismatch: atlas/E19",
+    "customer query mismatch: atlas/E21",
+    "customer query mismatch: atlas/E23",
+    "customer query mismatch: atlas/E26"
+  ],
+  "bad_candidate_rejected": true,
+  "before": {
+    "counts": {
+      "accepted": 50,
+      "dead_letter": 50,
+      "deliveries": 100,
+      "effects": 50,
+      "retries": 0
+    },
+    "mapping": "atlas-v1"
+  },
+  "customer_query_matches": true,
+  "good_candidate_promoted": true
+}
